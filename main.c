@@ -1,25 +1,25 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "inc/hw_memmap.h"       // ???????
-#include "inc/hw_types.h"        // ??????????é”Ÿæ–¤æ‹·????????????
-#include "inc/hw_timer.h"        // ??????é”Ÿæ–¤æ‹·?????
-#include "inc/hw_ints.h"         // ???é”Ÿæ–¤æ‹·??é”Ÿæ–¤æ‹·?????
-#include "driverlib/debug.h"     // ??????
-#include "driverlib/gpio.h"      // ???IO????????????
-#include "driverlib/pin_map.h"   // TM4C???MCU??é”Ÿæ–¤æ‹·?é”Ÿæ–¤æ‹·??????
-#include "driverlib/sysctl.h"    // ?????????
-#include "driverlib/systick.h"   // SysTick Driver ???????
-#include "driverlib/interrupt.h" // NVIC?é”Ÿæ–¤æ‹·???????????????
-#include "driverlib/timer.h"     // ??Timer?é”Ÿæ–¤æ‹·????????
-#include "driverlib/pwm.h"       // ??Timer?é”Ÿæ–¤æ‹·????????
+#include "inc/hw_memmap.h"       // »ùÖ·ºê¶¨Òå
+#include "inc/hw_types.h"        // Êı¾İÀàĞÍºê¶¨Òå£¬¼Ä´æÆ÷·ÃÎÊº¯Êı
+#include "inc/hw_timer.h"        // Óë¶¨Ê±Æ÷ÓĞ¹ØµÄºê¶¨Òå
+#include "inc/hw_ints.h"         // ÓëÖĞ¶ÏÓĞ¹ØµÄºê¶¨Òå
+#include "driverlib/debug.h"     // µ÷ÊÔÓÃ
+#include "driverlib/gpio.h"      // Í¨ÓÃIO¿Úºê¶¨ÒåºÍº¯ÊıÔ­ĞÍ
+#include "driverlib/pin_map.h"   // TM4CÏµÁĞMCUÍâÎ§Éè±¸¹Ü½Åºê¶¨Òå
+#include "driverlib/sysctl.h"    // ÏµÍ³¿ØÖÆ¶¨Òå
+#include "driverlib/systick.h"   // SysTick Driver º¯ÊıÔ­ĞÍ
+#include "driverlib/interrupt.h" // NVICÖĞ¶Ï¿ØÖÆÇı¶¯º¯ÊıÔ­ĞÍ
+#include "driverlib/timer.h"     // ÓëTimerÓĞ¹ØµÄº¯ÊıÔ­ĞÍ
+#include "driverlib/pwm.h"       // ÓëTimerÓĞ¹ØµÄº¯ÊıÔ­ĞÍ
 #include "driverlib/uart.h"
 #include "driverlib/fpu.h"
 #include "hw_i2c.h"
 #include "hw_types.h"
 #include "i2c.h"
 
-// ????????
+// ±äÁ¿¶¨Òå ±äÁ¿¶¨Òå
 #define SYSTICK_FREQUENCY 50
 #define dot 0x80
 // I2C
@@ -43,7 +43,7 @@
 #define TCA6424_OUTPUT_PORT1 0x05
 #define TCA6424_OUTPUT_PORT2 0x06
 
-// ????????????
+// date and time
 typedef struct
 {
     uint32_t year;
@@ -64,7 +64,7 @@ time mytime;
 uint32_t onesec = 0;
 int datenum[8];                                   //{10604202}
 int timenum[8];                                   //{00 80 01}
-uint8_t datedot[] = {0, 0, dot, 0, dot, 0, 0, 0}; // 2024.06.01,?????????
+uint8_t datedot[] = {0, 0, dot, 0, dot, 0, 0, 0}; // 2024.06.01,with space in it
 
 uint32_t ui32SysClock;
 // PWM
@@ -72,14 +72,14 @@ uint8_t times = 0;
 uint32_t pwmflag = 0;
 uint32_t freq = 100000;                                                                                                                                                                                                            // PWM???
 uint32_t ui32Freq[] = {587, 659, 494, 440, 880, 988, 740, 880, 1175, 1109, 988, 880, 100000, 880, 988, 880, 740, 659, 740, 880, 740, 494, 587, 659, 100000, 659, 880, 740, 587, 494, 440, 494, 659, 988, 880, 988, 880, 740, 659}; // ?????????????????????????,?????100000Hz
-uint32_t freqtime[] = {500, 500, 500, 500, 1500, 500, 500, 500, 500, 250, 250, 1500, 500, 1000, 500, 500, 500, 500, 1000, 500, 500, 500, 500, 1500, 500, 500, 500, 500, 500, 1000, 500, 500, 500, 500, 500, 250, 250, 1500, 500};  // ??é”Ÿæ–¤æ‹·?s
+uint32_t freqtime[] = {500, 500, 500, 500, 1500, 500, 500, 500, 500, 250, 250, 1500, 500, 1000, 500, 500, 500, 500, 1000, 500, 500, 500, 500, 1500, 500, 500, 500, 500, 500, 1000, 500, 500, 500, 500, 500, 250, 250, 1500, 500};  // ??é”Ÿæ–¤æ‹??s
 uint32_t timecount = 0;                                                                                                                                                                                                            // ?????
 uint32_t notes_num = 0;                                                                                                                                                                                                            // ?????????                                                                                                                                                                                                                // ?????????
-// led??
+// led
 uint8_t seg7[] = {0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0x77, 0x7c, 0x58, 0x5e, 0x079, 0x71, 0x5c};
 uint8_t name[] = {0x3F, 0x38, 0x77, 0x30, 0x1E, 0x79, 0x3E, 0x76}; // xuejialo
-// ???é”Ÿæ–¤æ‹·??
-void SysTickInit(void); // ????SysTick?é”Ÿæ–¤æ‹·?
+// º¯ÊıÔ­ĞÍÉùÃ÷
+void SysTickInit(void); // ÉèÖÃSysTickÖĞ¶Ï
 void Delay(uint32_t value);
 void S800_GPIO_Init(void);
 uint8_t I2C0_WriteByte(uint8_t DevAddr, uint8_t RegAddr, uint8_t WriteData);
@@ -92,7 +92,7 @@ void setdate(date *date, int year, int month, int day);
 void settime(time *time, int hour, int minute, int second);
 void dateupdate(date *date);
 void timeupdate(time *time);
-// ???????
+// delayº¯Êı
 void Delay(uint32_t value)
 {
     uint32_t ui32Loop;
@@ -100,9 +100,9 @@ void Delay(uint32_t value)
     {
     };
 }
-// ?????????
+// º¯Êı¶¨Òå
 
-// ???????????
+// date and time
 void date_and_time_init(date *date, time *time)
 {
     setdate(date, 2024, 6, 1);
@@ -112,41 +112,40 @@ void date_and_time_init(date *date, time *time)
 }
 void SysTickInit(void)
 {
-    SysTickPeriodSet(ui32SysClock / SYSTICK_FREQUENCY); // ????????????,???????20ms
-    SysTickEnable();                                    // SysTick???
-    SysTickIntEnable();                                 // SysTick?é”Ÿæ–¤æ‹·?????
+    SysTickPeriodSet(ui32SysClock / SYSTICK_FREQUENCY); // 20msÖ´ĞĞÒ»´Î
+    SysTickEnable();                                    
+    SysTickIntEnable();                                  
 }
 void DevicesInit(void)
 {
-    // ?????25MHz????????????PLL????????16MHz
-    ui32SysClock = SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
-                                       SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480),
-                                      16000000);
+    // Ê¹ÓÃÍâ²¿25MHzÖ÷Ê±ÖÓÔ´£¬¾­¹ıPLL£¬È»ºó·ÖÆµÎª16MHz
+    g_ui32SysClock = SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
+                                         SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480),
+                                        16000000);
 
     FPULazyStackingEnable();
     FPUEnable();
 
-    S800_GPIO_Init(); // GPIO?????
-    S800_I2C0_Init();
-    PWMInit();         // PWM?????
-    SysTickInit();     // ????SysTick?é”Ÿæ–¤æ‹·?
-    IntMasterEnable(); // ???é”Ÿæ–¤æ‹·?????
+    GPIOInit();        // GPIO³õÊ¼»¯
+    PWMInit();         // PWM³õÊ¼»¯
+    SysTickInit();     // ÉèÖÃSysTickÖĞ¶Ï
+    IntMasterEnable(); // ×ÜÖĞ¶ÏÔÊĞí
 }
 
 void PWMInit()
 {
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0); // PWM0???
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0); // PWM0Ê¹ÄÜ
 
-    PWMOutputState(PWM0_BASE, PWM_OUT_7_BIT, true); // ???(????)PWM0_4?????
-    // PWMGenEnable(PWM0_BASE, PWM_GEN_2);             //???PWM0????2???????(???4??PWM??2?????????????)
-    // PWMGenPeriodSet(PWM0_BASE, PWM_GEN_2, g_ui32SysClock / ui32Freq_Hz); // ????Freq_Hz????PWM????
+    PWMOutputState(PWM0_BASE, PWM_OUT_7_BIT, true); // Ê¹ÄÜ(ÔÊĞí)PWM0_4µÄÊä³ö
+    // PWMGenEnable(PWM0_BASE, PWM_GEN_2);             //Ê¹ÄÜPWM0Ä£¿éµÄ2ºÅ·¢ÉúÆ÷(ÒòÎª4ºÅPWMÊÇ2ºÅ·¢ÉúÆ÷²úÉúµÄ)
+    // PWMGenPeriodSet(PWM0_BASE, PWM_GEN_2, g_ui32SysClock / ui32Freq_Hz); // ¸ù¾İFreq_HzÉèÖÃPWMÖÜÆÚ
 
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK); // ???GPIOG
-    GPIOPinConfigure(GPIO_PK5_M0PWM7);           // ???????????
-    GPIOPinTypePWM(GPIO_PORTK_BASE, GPIO_PIN_5); // ???????
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK); // Ê¹ÄÜGPIOG
+    GPIOPinConfigure(GPIO_PK5_M0PWM7);           // ÅäÖÃÒı½Å¸´ÓÃ
+    GPIOPinTypePWM(GPIO_PORTK_BASE, GPIO_PIN_5); // Òı½ÅÓ³Éä
 
-    PWMGenConfigure(PWM0_BASE, PWM_GEN_3, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC); // ????PWM??????
-    // PWMPulseWidthSet(PWM0_BASE, PWM_OUT_4,(PWMGenPeriodGet(PWM0_BASE, PWM_GEN_2)/ 2)); //?????????50%
+    PWMGenConfigure(PWM0_BASE, PWM_GEN_3, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC); // ÅäÖÃPWM·¢ÉúÆ÷
+    // PWMPulseWidthSet(PWM0_BASE, PWM_OUT_4,(PWMGenPeriodGet(PWM0_BASE, PWM_GEN_2)/ 2)); //ÉèÖÃÕ¼¿Õ±ÈÎª50%
 }
 
 void S800_GPIO_Init(void)
@@ -185,7 +184,7 @@ void S800_I2C0_Init(void)
     I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, 0x00);
 }
 
-// date,time???
+// date,time set
 void setdate(date *date, int year, int month, int day)
 {
     date->year = year;
@@ -275,8 +274,8 @@ void time_and_date_secupdate(time *time, date *date)
         date->day++;
     }
 }
-// ?é”Ÿæ–¤æ‹·????????
-void SysTick_Handler(void) // ????????20ms
+// SysTickÖĞ¶Ï·şÎñ³ÌĞò
+void SysTick_Handler(void) 
 {
     // PWM
     if (pwmflag == 1)
@@ -300,7 +299,7 @@ void SysTick_Handler(void) // ????????20ms
         }
     }
 
-    // 1s???????
+    // 1s sec+1
     onesec++;
     if (onesec >= 50)
     {
@@ -311,7 +310,7 @@ void SysTick_Handler(void) // ????????20ms
     }
 }
 
-// PWM?????????
+// PWM player
 void PWMStart(uint32_t ui32Freq_Hz)
 {
     PWMGenDisable(PWM0_BASE, PWM_GEN_3);                                                 // ???PWM0????2???????(???4??PWM??2?????????????)
@@ -322,10 +321,10 @@ void PWMStart(uint32_t ui32Freq_Hz)
 void PWMStop()
 {
     pwmflag = 0;
-    PWMGenDisable(PWM0_BASE, PWM_GEN_3); // M0PWM4(PG0)??????PWM???
+    PWMGenDisable(PWM0_BASE, PWM_GEN_3); // PWM7 
 }
 
-// I2c???
+// I2c
 
 uint8_t I2C0_WriteByte(uint8_t DevAddr, uint8_t RegAddr, uint8_t WriteData)
 {
@@ -335,10 +334,10 @@ uint8_t I2C0_WriteByte(uint8_t DevAddr, uint8_t RegAddr, uint8_t WriteData)
     }; // ???I2C0?????????
     //
     I2CMasterSlaveAddrSet(I2C0_BASE, DevAddr, false);
-    // ??????????????????????????false???????é”Ÿæ–¤æ‹·?????true????????????
+    // ??????????????????????????false???????é”Ÿæ–¤æ‹??????true????????????
 
-    I2CMasterDataPut(I2C0_BASE, RegAddr);                         // ????é”Ÿæ–¤æ‹·?é”Ÿæ–¤æ‹·????????
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START); // ??????é”Ÿæ–¤æ‹·?????
+    I2CMasterDataPut(I2C0_BASE, RegAddr);                         // ????é”Ÿæ–¤æ‹??é”Ÿæ–¤æ‹?????????
+    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START); // ??????é”Ÿæ–¤æ‹??????
     while (I2CMasterBusy(I2C0_BASE))
     {
     };
@@ -346,7 +345,7 @@ uint8_t I2C0_WriteByte(uint8_t DevAddr, uint8_t RegAddr, uint8_t WriteData)
     rop = (uint8_t)I2CMasterErr(I2C0_BASE); // ??????
 
     I2CMasterDataPut(I2C0_BASE, WriteData);
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH); // ??????é”Ÿæ–¤æ‹·???????????
+    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH); // ??????é”Ÿæ–¤æ‹????????????
     while (I2CMasterBusy(I2C0_BASE))
     {
     };
@@ -365,33 +364,33 @@ uint8_t I2C0_ReadByte(uint8_t DevAddr, uint8_t RegAddr)
     I2CMasterSlaveAddrSet(I2C0_BASE, DevAddr, false);
     I2CMasterDataPut(I2C0_BASE, RegAddr);
     //	I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START);
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_SINGLE_SEND); // ??é”Ÿæ–¤æ‹·???é”Ÿæ–¤æ‹·?????
+    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_SINGLE_SEND); // ??é”Ÿæ–¤æ‹????é”Ÿæ–¤æ‹??????
     while (I2CMasterBusBusy(I2C0_BASE))
         ;
     rop = (uint8_t)I2CMasterErr(I2C0_BASE);
     Delay(100);
     // receive data
     I2CMasterSlaveAddrSet(I2C0_BASE, DevAddr, true);            // ?????????
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_SINGLE_RECEIVE); // ??é”Ÿæ–¤æ‹·??é”Ÿæ–¤æ‹·?????
+    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_SINGLE_RECEIVE); // ??é”Ÿæ–¤æ‹???é”Ÿæ–¤æ‹??????
     while (I2CMasterBusBusy(I2C0_BASE))
         ;
     value = I2CMasterDataGet(I2C0_BASE); // ????????????
     Delay(100);
     return value;
 }
-// ??????
+// Æô¶¯½×¶Î
 void setup()
 {
     int timer0 = 0;
     int timer1 = 0;
     uint32_t j = 0;
     uint8_t light = 0x80;
-    uint32_t xuehao[8] = {5, 4, 0, 0, 1, 9, 1, 3};          // ç€›ï¹€å½¿31910045
-    I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x0ff); // éå´‡ä¼…
-    // pwmflag = 1;//???????????
+    uint32_t xuehao[8] = {5, 4, 0, 0, 1, 9, 1, 3};          // Ñ§ºÅ31910045
+    I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x0ff); // ¹Ø±ÕLED1-8
+    // pwmflag = 1;// ¿ªÆôÒôÀÖ²¥·Å
     for (timer1 = 0; timer1 < 3; timer1++)
     {
-        I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x00); // éå´‡ä¼…
+        I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x00); // ¿ªÆôLED1-8
         for (timer0 = 0; timer0 < 200; timer0++)
         {
             for (j = 0, light = 0x80; j < 8; j++, light >>= 1)
@@ -404,10 +403,10 @@ void setup()
         }
         I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, 0x00);
         I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x0ff);
-        Delay(1e6); // ç»¾?0.5s
+        Delay(1e6); // ´óÔ¼0.5s
     }
 
-    // é„å‰§ãšæ¿®æ’³æ‚•
+    // ÏÔÊ¾ĞÕÃû×ÖÄ¸
     for (timer1 = 0; timer1 < 3; timer1++)
     {
         I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x00); //
@@ -423,9 +422,9 @@ void setup()
         }
         I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, 0x00);
         I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x0ff);
-        Delay(1e6); // çº¦0.5s
+        Delay(1e6); //
     }
-    PWMStop(); // å…³é—­éŸ³ä¹
+    PWMStop(); // ¹Ø±ÕÒôÀÖ²¥·Å
 }
 
 int main()
