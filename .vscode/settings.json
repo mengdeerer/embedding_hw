@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "fpu.h": "c",
+        "gpio.h": "c",
+        "systick.h": "c"
+    }
+}
