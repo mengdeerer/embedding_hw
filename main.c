@@ -59,7 +59,8 @@ typedef struct
     uint32_t second;
 } time;
 
-typedef struct{
+typedef struct
+{
     uint32_t hour;
     uint32_t minute;
     uint32_t second;
@@ -88,16 +89,20 @@ uint32_t notes_num = 0;                                                         
 // led
 uint8_t seg7[] = {0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f, 0x77, 0x7c, 0x58, 0x5e, 0x079, 0x71, 0x5c};
 uint8_t name[] = {0x3F, 0x38, 0x77, 0x30, 0x1E, 0x79, 0x3E, 0x76}; // xuejialo
-//状态切换
-volatile uint32_t state = 0;//state=0显示时间，state=1显示日期,state2闹钟
-//UART
+// 状态切换
+volatile uint32_t state = 0; // state=0显示时间，state=1显示日期,state2闹钟
+// UART
 uint8_t uart_receive_char;
 uint8_t uart_receive_str[30] = {0x00};
 volatile uint8_t wordi = 0;
-//中断
+// 中断
 uint32_t ui32SysClock, ui32IntPriorityGroup, ui32IntPriorityMask;
 uint32_t ui32IntPrioritySystick, ui32IntPriorityUart0;
-
+// 按钮
+uint8_t button = 0xff;
+uint32_t buttondelay = 0; // 防抖
+uint8_t prev_button = 0;
+uint32_t buttonstate = 0;
 // 函数原型声明
 void SysTickInit(void); //
 void Delay(uint32_t value);
@@ -115,6 +120,8 @@ void timeupdate(time *time);
 void S800_UART_Init(void);
 void alarm_init(void);
 void setalarm(alarm *alarm, int hour, int minute, int second);
+void UARTStringPut(uint8_t *cMessage);
+void UARTStringPutNonBlocking(const char *cMessage);
 // delay函数
 void Delay(uint32_t value)
 {
@@ -136,31 +143,31 @@ void date_and_time_init(date *date, time *time)
 void SysTickInit(void)
 {
     SysTickPeriodSet(ui32SysClock / SYSTICK_FREQUENCY); // 20ms执行一次
-    SysTickEnable();                                    
-    SysTickIntEnable();                                  
+    SysTickEnable();
+    SysTickIntEnable();
 }
 void DevicesInit(void)
 {
     // 使用外部25MHz主时钟源，经过PLL，然后分频为16MHz
     ui32SysClock = SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
-                                         SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480),
-                                        16000000);
+                                       SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480),
+                                      16000000);
 
-    //FPULazyStackingEnable();
-    //FPUEnable();
-    S800_GPIO_Init(); 
+    // FPULazyStackingEnable();
+    // FPUEnable();
+    S800_GPIO_Init();
     S800_I2C0_Init();
     S800_UART_Init();
-    PWMInit();         // PWM初始化
-    SysTickInit();     // 设置SysTick中断
-    //IntMasterEnable(); // 总中断允许
-    //改中断优先级
+    PWMInit();     // PWM初始化
+    SysTickInit(); // 设置SysTick中断
+    // IntMasterEnable(); // 总中断允许
+    // 改中断优先级
 
     IntEnable(INT_UART0);
     UARTIntEnable(UART0_BASE, UART_INT_RX | UART_INT_RT); // Enable UART0 RX,TX interrupt
     IntMasterEnable();
     ui32IntPriorityMask = IntPriorityMaskGet();
-    IntPriorityGroupingSet(3); // Set all priority to pre-emtption priority
+    IntPriorityGroupingSet(3);            // Set all priority to pre-emtption priority
     IntPrioritySet(INT_UART0, 3);         // Set INT_UART0 to highest priority
     IntPrioritySet(FAULT_SYSTICK, 0x0e0); // Set INT_SYSTICK to lowest priority
 
@@ -168,7 +175,7 @@ void DevicesInit(void)
     ui32IntPriorityUart0 = IntPriorityGet(INT_UART0);
     ui32IntPrioritySystick = IntPriorityGet(FAULT_SYSTICK);
 
-    //时间初始化
+    // 时间初始化
     date_and_time_init(&mydate, &mytime);
 }
 
@@ -243,7 +250,7 @@ void S800_UART_Init(void) // initialize
 
     // Configure the UART for 115,200, 8-N-1 operation.
     UARTConfigSetExpClk(UART0_BASE, ui32SysClock, 115200, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE));
-    //UARTStringPut((uint8_t *)"\r\nhello,world!\r\n"); // send this message once when initialized
+    // UARTStringPut((uint8_t *)"\r\nhello,world!\r\n"); // send this message once when initialized
 }
 
 // date,time set
@@ -340,7 +347,7 @@ void time_and_date_secupdate(time *time, date *date)
         time->hour = 0;
         date->day++;
     }
-    //注意月份对应天数变化
+    // 注意月份对应天数变化
     if (date->month == 2)
     {
         if (date->year % 4 == 0 && date->year % 100 != 0 || date->year % 400 == 0)
@@ -378,13 +385,13 @@ void time_and_date_secupdate(time *time, date *date)
     }
 }
 
-//闹钟初始化
+// 闹钟初始化
 void alarm_init()
 {
     setalarm(&myalarm, 10, 10, 0);
 }
 // SysTick中断服务程序
-void SysTick_Handler(void) 
+void SysTick_Handler(void)
 {
     // PWM
     if (pwmflag == 1)
@@ -412,7 +419,7 @@ void SysTick_Handler(void)
     onesec++;
     if (onesec >= 50)
     {
-        onesec = 0; 
+        onesec = 0;
         time_and_date_secupdate(&mytime, &mydate);
         dateupdate(&mydate);
         timeupdate(&mytime);
@@ -422,11 +429,56 @@ void SysTick_Handler(void)
     {
         pwmflag = 1;
         alarmcount++;
-        if(alarmcount == 250)//5s
+        if (alarmcount == 250) // 5s
         {
             alarmcount = 0;
             pwmflag = 0;
             PWMStop();
+        }
+    }
+    button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
+    if (button != prev_button)
+    {
+        buttondelay++;
+        if (buttondelay == 2)
+        {
+            button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
+            if (button != prev_button)
+            {
+                if (button == 0xfe)
+                {
+                    buttonstate = 1;
+                }
+                else if (button == 0xfd)
+                {
+                    buttonstate = 2;
+                }
+                else if (button == 0xfb)
+                {
+                    buttonstate = 3;
+                }
+                else if (button == 0xf7)
+                {
+                    buttonstate = 4;
+                }
+                else if (button == 0xef)
+                {
+                    buttonstate = 5;
+                }
+                else if (button == 0xdf)
+                {
+                    buttonstate = 6;
+                }
+                else if (button == 0xbf)
+                {
+                    buttonstate = 7;
+                }
+                else if (button == 0x7f)
+                {
+                    buttonstate = 0;
+                }
+                buttondelay = 0;
+            }
         }
     }
 }
@@ -442,7 +494,7 @@ void PWMStart(uint32_t ui32Freq_Hz)
 void PWMStop()
 {
     pwmflag = 0;
-    PWMGenDisable(PWM0_BASE, PWM_GEN_3); // PWM7 
+    PWMGenDisable(PWM0_BASE, PWM_GEN_3); // PWM7
 }
 
 // I2c
@@ -499,7 +551,7 @@ uint8_t I2C0_ReadByte(uint8_t DevAddr, uint8_t RegAddr)
     Delay(100);
     return value;
 }
-//UART通信
+// UART通信
 void UARTStringPut(uint8_t *cMessage)
 {
     while (*cMessage != '\0')
@@ -514,13 +566,17 @@ void UARTStringPutNonBlocking(const char *cMessage)
 void UART0_Handler(void)
 {
     int32_t uart0_int_status;
-    uart0_int_status = UARTIntStatus(UART0_BASE, true); // Get the interrrupt status.
-    UARTIntClear(UART0_BASE, uart0_int_status); // Clear the asserted interrupts
-    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, 0); // PN1 off
+    uart0_int_status = UARTIntStatus(UART0_BASE, true);    // Get the interrrupt status.
+    UARTIntClear(UART0_BASE, uart0_int_status);            // Clear the asserted interrupts
+    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, GPIO_PIN_1); // PN1 off
 
     while (UARTCharsAvail(UART0_BASE)) // while receive FIFO is not empty
     {
         uart_receive_str[wordi] = UARTCharGetNonBlocking(UART0_BASE);
+        if (uart_receive_str[wordi] == '\r')
+        {
+            break;
+        }
         wordi++;
     }
     uart_receive_str[wordi] = '\0';
@@ -528,17 +584,15 @@ void UART0_Handler(void)
     // if (strcasecmp("AT+CLASS", uart_receive_str) == 0)
     // {
     //     UARTStringPut((uint8_t *)"CLASS+F1703101");
-    //     i = 0;
+    //     wordi = 0;
     // }
 
-    // if (strcasecmp("AT+STUDENTCODE", uart_receive_str) == 0)
+    // if (strcasecmp("AT+STUSS", uart_receive_str) == 0)
     // {
     //     UARTStringPut((uint8_t *)"CODE+51703");
-    //     i = 0;
+    //     wordi = 0;
     // }
-
-    // while (GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_1) == 0)
-    //     GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, GPIO_PIN_1); // PN1 is on when PJ0 pressed
+    wordi = 0;
 
     GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, 0); // PN1 off
 }
@@ -552,8 +606,8 @@ void setup()
     uint8_t light = 0x80;
     uint32_t xuehao[8] = {5, 4, 0, 0, 1, 9, 1, 3};          // 学号31910045
     I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x0ff); // 关闭LED1-8
-    UARTStringPut("Hello World!\r\n");
-    // pwmflag = 1;// 开启音乐播放
+    // UARTStringPut("Hello World!\r\n");
+    //  pwmflag = 1;// 开启音乐播放
     for (timer1 = 0; timer1 < 3; timer1++)
     {
         I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x00); // 开启LED1-8
@@ -599,9 +653,11 @@ int main()
     DevicesInit();
     // setup();
 
-    //debug
-    timeflag = 1;
-    showtime(&mytime);
+    // debug
+    UARTStringPut("Hello World!\r\n");
+
+    // timeflag = 1;
+    // showtime(&mytime);
 
     // dateflag = 1;
     // showdate(&mydate);
@@ -609,20 +665,26 @@ int main()
     // I2C0_WriteByte(TCA6424_I2CADDR,TCA6424_OUTPUT_PORT2,0x81);//
     while (1)
     {
-        switch(state)
+
+        if (buttonstate == 1)
         {
-            case 0:
-                dateflag = 0;
-                timeflag = 1;
-                showtime(&mytime);
-                break;
-            case 1:
-                dateflag = 1;
-                timeflag = 0;
-                showdate(&mydate);
-                break;
-            default:
-                break;
+            UARTStringPut("AT+CLASS\r\n");
         }
+
+        // switch(state)
+        // {
+        //     case 0:
+        //         dateflag = 0;
+        //         timeflag = 1;
+        //         showtime(&mytime);
+        //         break;
+        //     case 1:
+        //         dateflag = 1;
+        //         timeflag = 0;
+        //         showdate(&mydate);
+        //         break;
+        //     default:
+        //         break;
+        // }
     }
 }
