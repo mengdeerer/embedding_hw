@@ -105,7 +105,7 @@ int flow_speed = 100;
 // PWM
 uint8_t times = 0;
 uint32_t pwmflag = 0;
-uint32_t freq = 100000;                                                                                                                                                                                                            // PWM???
+uint32_t freq = 1000000;                                                                                                                                                                                                            // PWM???
 uint32_t ui32Freq[] = {587, 659, 494, 440, 880, 988, 740, 880, 1175, 1109, 988, 880, 100000, 880, 988, 880, 740, 659, 740, 880, 740, 494, 587, 659, 100000, 659, 880, 740, 587, 494, 440, 494, 659, 988, 880, 988, 880, 740, 659}; // ?????????????????????????,?????100000Hz
 uint32_t freqtime[] = {500, 500, 500, 500, 1500, 500, 500, 500, 500, 250, 250, 1500, 500, 1000, 500, 500, 500, 500, 1000, 500, 500, 500, 500, 1500, 500, 500, 500, 500, 500, 1000, 500, 500, 500, 500, 500, 250, 250, 1500, 500};  // ??é”Ÿæ–¤æ‹??s
 uint32_t timecount = 0;                                                                                                                                                                                                            // ?????
@@ -710,6 +710,7 @@ void SysTick_Handler(void)
         onesec = 0;
         mytime.second++;
         time_and_date_secupdate(&mytime, &mydate);
+        light_display();
     }
     updatetime++;
     if (updatetime == 10)
@@ -721,9 +722,8 @@ void SysTick_Handler(void)
         alarmupdate(&myalarm);
     }
     // ÄÖÖÓ
-    if (mytime.hour == myalarm.hour && mytime.minute == myalarm.minute && mytime.second == myalarm.second && alarm_onoff == 1)
+    if(alarmcount!=0)
     {
-        pwmflag = 1;
         alarmcount++;
         if (alarmcount == 250) // 5s
         {
@@ -731,6 +731,11 @@ void SysTick_Handler(void)
             pwmflag = 0;
             PWMStop();
         }
+    }
+    if (mytime.hour == myalarm.hour && mytime.minute == myalarm.minute && mytime.second == myalarm.second && alarm_onoff == 1)
+    {
+        pwmflag = 1;
+        alarmcount++;
     }
     buttontime++;
     
@@ -751,6 +756,8 @@ void SysTick_Handler(void)
             }
         }
     }
+    //
+
 }
 // ×óÓÒÁ÷Ë®
 void array_flow(int *flow_num)
@@ -783,12 +790,14 @@ void PWMStart(uint32_t ui32Freq_Hz)
     PWMGenDisable(PWM0_BASE, PWM_GEN_3);                                                 // ???PWM0????2???????(???4??PWM??2?????????????)
     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_3, ui32SysClock / ui32Freq_Hz);                   // ????Freq_Hz????PWM????
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_7, (PWMGenPeriodGet(PWM0_BASE, PWM_GEN_3) / 2)); // ?????????50%
-    PWMGenEnable(PWM0_BASE, PWM_GEN_3);                                                  // ???PWM0????2???????(???4??PWM??2?????????????)
+    PWMGenEnable(PWM0_BASE, PWM_GEN_3);
+    PWMOutputState(PWM0_BASE, PWM_OUT_7_BIT, true); 
 }
 void PWMStop()
 {
     pwmflag = 0;
     PWMGenDisable(PWM0_BASE, PWM_GEN_3); // PWM7
+    PWMOutputState(PWM0_BASE, PWM_OUT_7_BIT, false);
 }
 
 // I2c
@@ -1185,11 +1194,11 @@ void light_display()
 {
     if (alarm_onoff == 1)
     {
-        I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0xfe);
+        I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x00);
     }
     else
     {
-        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, 0xff);
+        I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0xff);
     }
 }
 // Æô¶¯½×¶Î
@@ -1239,13 +1248,15 @@ void setup()
         I2C0_WriteByte(PCA9557_I2CADDR, PCA9557_OUTPUT, 0x0ff);
         Delay(1e6); //
     }
+    
     PWMStop(); // ¹Ø±ÕÒôÀÖ²¥·Å
 }
 
 int main()
 {
     DevicesInit();
-    // setup();
+    setup();
+
     UARTStringPut("Hello World!\r\n");
     // pui32Data[0] = 49;
     // pui32Data[1] = 3;
