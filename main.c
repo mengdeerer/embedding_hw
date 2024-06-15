@@ -474,30 +474,48 @@ void button_catch(){
                     {
                         if (editpart == 0)
                         {
-                            mydate.day--;
+                            if(mydate.day>0)
+                            {
+                                mydate.day--;
+                            }
                         }
                         else if (editpart == 1)
                         {
-                            mydate.month--;
+                            if(mydate.month>0)
+                            {
+                                mydate.month--;
+                            }
                         }
                         else if (editpart == 2)
                         {
-                            mydate.year--;
+                            if(mydate.year>0)
+                            {
+                                mydate.year--;
+                            }
                         }
                     }
                     else if (timeflag == 1)
                     {
                         if (editpart == 0)
                         {
-                            mytime.second--;
+                            if(mytime.second>0)
+                            {
+                                mytime.second--;
+                            }
                         }
                         else if (editpart == 1)
                         {
-                            mytime.minute--;
+                            if(mytime.minute>0)
+                            {
+                                mytime.minute--;
+                            }
                         }
                         else if (editpart == 2)
                         {
-                            mytime.hour--;
+                            if(mytime.hour>0)
+                            {
+                                mytime.hour--;
+                            }
                         }
                     }
                 }
@@ -930,6 +948,8 @@ void command_process(){
         UARTStringPut("\tinit clock                       : intialize the clock to 10:08:00\n");
         UARTStringPut("\tget <TIME/DATE/ALARM>            : get status\n");
         UARTStringPut("\tset <TIME/ALARM TIME/DATE> <xx:xx:xx> : set clock status\n");
+        UARTStringPut("\tspeed <high/low>                 : set flow speed\n");
+        UARTStringPut("\talarm <on/off>                   : set alarm on/off\n");
         wordi = 0;
         return;
     }
@@ -1155,6 +1175,12 @@ void command_process(){
         return; 
     }
     UARTStringPut("Invalid command\n");
+    UARTStringPut("Please use commands like:\n");
+    UARTStringPut("\tinit clock                       : intialize the clock to 10:08:00\n");
+    UARTStringPut("\tget <TIME/DATE/ALARM>            : get status\n");
+    UARTStringPut("\tset <TIME/ALARM TIME/DATE> <xx:xx:xx> : set clock status\n");
+    UARTStringPut("\tspeed <high/low>                 : set flow speed\n");
+    UARTStringPut("\talarm <on/off>                   : set alarm on/off\n");
 }
 // 流水线显示时间日期
 void date_flow_display(date *date)
