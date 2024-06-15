@@ -121,7 +121,7 @@ uint8_t uart_receive_str[50] = {0x00};
 volatile uint8_t wordi = 0;
 int endflag = 0;
 // ÖÐ¶Ï
-uint32_t ui32SysClock, ui32IntPriorityGroup, ui32IntPriorityMask;
+uint32_t ui32IntPriorityGroup, ui32IntPriorityMask;
 uint32_t ui32IntPrioritySystick, ui32IntPriorityUart0;
 // °´Å¥
 uint8_t button = 0xff;
@@ -975,6 +975,18 @@ void command_process(){
             }
             i++;
         }
+    }
+    if(strcmp("speed high", uart_receive_str) == 0)
+    {
+        flow_speed = 50;
+        UARTStringPut("OK,Speed high\n");
+        return;
+    }
+    if(strcmp("speed low", uart_receive_str) == 0)
+    {
+        flow_speed = 100;
+        UARTStringPut("OK,Speed low\n");
+        return;
     }
     if (strcmp("alarm on", uart_receive_str) == 0)
     {
