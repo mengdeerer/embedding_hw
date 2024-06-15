@@ -19,6 +19,8 @@
 #include "i2c.h"
 #include "string.h"
 #include "ctype.h"
+//#include "hibernate.h"
+#include "eeprom.h"
 //#include "utils/uartstdio.h"
 
 // 变量定义 变量定义
@@ -67,7 +69,7 @@ typedef struct
     uint32_t second;
 } alarm;
 uint32_t alarmcount = 0;
-uint32_t alarm_onoff = 0;
+uint32_t alarm_onoff = 1;
 uint32_t alarmflag = 0;
 uint32_t dateflag = 0;
 uint32_t timeflag = 0;
@@ -75,11 +77,15 @@ date mydate;
 time mytime;
 alarm myalarm;
 uint32_t onesec = 0;
-int displaydelay = 20000; // 数码管延迟
+int displaydelay = 2000; // 数码管延迟
 int datenum[8];           //{10604202}
 int timenum[8];           //{00 80 01}
 int alarmnum[8];
 uint8_t datedot[] = {0, 0, dot, 0, dot, 0, 0, 0}; // 2024.06.01,with space in it
+//eeprom
+uint32_t ui32EEPROMInit;
+uint32_t pui32Data[3];
+uint32_t pui32Read[3];
 
 uint32_t ui32SysClock;
 // 编辑模式
@@ -113,6 +119,7 @@ volatile uint32_t state = 0; // state=0显示时间，state=1显示日期,state2闹钟
 uint8_t uart_receive_char;
 uint8_t uart_receive_str[50] = {0x00};
 volatile uint8_t wordi = 0;
+int endflag = 0;
 // 中断
 uint32_t ui32SysClock, ui32IntPriorityGroup, ui32IntPriorityMask;
 uint32_t ui32IntPrioritySystick, ui32IntPriorityUart0;
@@ -143,6 +150,7 @@ void UARTStringPut(const char *cMessage);
 void UARTStringPutNonBlocking(const char *cMessage);
 void array_flow(int *flow_num);
 void light_display(void);
+void command_process(void);
 // delay函数
 void Delay(uint32_t value)
 {
@@ -164,8 +172,18 @@ void clear_display()
 // date and time
 void date_and_time_init(date *date, time *time)
 {
+    EEPROMRead(pui32Read, 0x400, sizeof(pui32Read));
+    if(pui32Read[0]>=0&&pui32Read[0]<=23&&pui32Read[1]>=0&&pui32Read[1]<=59&&pui32Read[2]>=0&&pui32Read[2]<=59)
+    {
+        time->hour = pui32Read[0];
+        time->minute = pui32Read[1];
+        time->second = pui32Read[2];
+    }
+    else
+    {
+        settime(time, 10, 8, 0);
+    }
     setdate(date, 2024, 6, 1);
-    settime(time, 10, 8, 0);
     dateupdate(date);
     timeupdate(time);
 }
@@ -203,7 +221,24 @@ void DevicesInit(void)
     ui32IntPriorityGroup = IntPriorityGroupingGet();
     ui32IntPriorityUart0 = IntPriorityGet(INT_UART0);
     ui32IntPrioritySystick = IntPriorityGet(FAULT_SYSTICK);
+    // 启用EEPROM模块。
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0);
 
+    // 等待EEPROM模块准备好。
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_EEPROM0))
+    {
+    }
+
+    // 等待EEPROM初始化完成。
+    ui32EEPROMInit = EEPROMInit();
+
+    // 检查EEPROM初始化是否返回错误，并通知应用程序。
+    if (ui32EEPROMInit != EEPROM_INIT_OK)
+    {
+        while (1)
+        {
+        }
+    }
     // 时间初始化
     date_and_time_init(&mydate, &mytime);
     alarm_init();
@@ -284,6 +319,195 @@ void S800_UART_Init(void) // initialize
     UARTFIFOLevelSet(UART0_BASE, UART_FIFO_TX2_8, UART_FIFO_RX7_8);
 }
 
+//button
+void button_catch(){
+    if (buttontime > 10)
+    {
+        button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
+        if (buttontime > 100000)
+        {
+            buttontime = 11;
+        }
+    }
+
+    if (button != 0xff)
+    {
+        buttondelay++;
+        if (buttondelay == 3)
+        {
+            // UARTStringPut((uint8_t *)"buttonget\r\n");
+            button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
+
+            buttondelay = 0;
+            // UARTStringPut((uint8_t *)"buttonnnnn\r\n");
+            buttontime = 0;
+            if (button == 0xfe)
+            {
+                buttonstate = 1;
+                state++;
+                if (state == 3)
+                {
+                    state = 0;
+                }
+                if (state == 0)
+                {
+                    clear_display();
+                    dateflag = 1;
+                }
+                else if (state == 1)
+                {
+                    clear_display();
+                    timeflag = 1;
+                }
+                else if (state == 2)
+                {
+                    clear_display();
+                    alarmflag = 1;
+                }
+                UARTStringPut((uint8_t *)"button1\r\n");
+            }
+            else if (button == 0xfd) // 是否流水
+            {
+                buttonstate = 2;
+                if(dateflag == 1)
+                {
+                    clear_display();
+                    date_flow_flag = 1;
+                }
+                else if(timeflag == 1)
+                {
+                    clear_display();
+                    time_flow_flag = 1;
+                }
+                // if (date_flow_flag == 0)
+                // {
+                //     clear_display();
+                //     date_flow_flag = 1;
+                // }
+                // else
+                // {
+                //     date_flow_flag = 0;
+                // }
+            }
+            else if (button == 0xfb) // 左右流水
+            {
+                buttonstate = 3;
+                if (direction_flag == 1)
+                {
+                    direction_flag = 0;
+                }
+                else
+                {
+                    direction_flag = 1;
+                }
+            }
+            else if (button == 0xf7)
+            {
+                buttonstate = 4;
+                pui32Data[0] = mytime.hour;
+                pui32Data[1] = mytime.minute;
+                pui32Data[2] = mytime.second;
+                EEPROMProgram(pui32Data, 0x400, sizeof(pui32Data));
+            }
+            else if (button == 0xef)
+            {
+                buttonstate = 5;
+                if (editmode == 0)
+                {
+                    editmode = 1;
+                }
+                else
+                {
+                    editmode = 0;
+                }
+            }
+            else if (button == 0xdf)
+            {
+                buttonstate = 6;
+                editpart++;
+                if (editpart == 3)
+                {
+                    editpart = 0;
+                }
+            }
+            else if (button == 0xbf)
+            {
+                buttonstate = 7;
+                if (editmode == 1)
+                {
+                    if (dateflag == 1)
+                    {
+                        if (editpart == 0)
+                        {
+                            mydate.day++;
+                        }
+                        else if (editpart == 1)
+                        {
+                            mydate.month++;
+                        }
+                        else if (editpart == 2)
+                        {
+                            mydate.year++;
+                        }
+                    }
+                    else if (timeflag == 1)
+                    {
+                        if (editpart == 0)
+                        {
+                            mytime.second++;
+                        }
+                        else if (editpart == 1)
+                        {
+                            mytime.minute++;
+                        }
+                        else if (editpart == 2)
+                        {
+                            mytime.hour++;
+                        }
+                    }
+                }
+            }
+            else if (button == 0x7f)
+            {
+                buttonstate = 8;
+                if (editmode == 1)
+                {
+                    if (dateflag == 1)
+                    {
+                        if (editpart == 0)
+                        {
+                            mydate.day--;
+                        }
+                        else if (editpart == 1)
+                        {
+                            mydate.month--;
+                        }
+                        else if (editpart == 2)
+                        {
+                            mydate.year--;
+                        }
+                    }
+                    else if (timeflag == 1)
+                    {
+                        if (editpart == 0)
+                        {
+                            mytime.second--;
+                        }
+                        else if (editpart == 1)
+                        {
+                            mytime.minute--;
+                        }
+                        else if (editpart == 2)
+                        {
+                            mytime.hour--;
+                        }
+                    }
+                }
+            }
+            button = 0xff;
+        }
+    }
+}
 // date,time set
 void setdate(date *date, int year, int month, int day)
 {
@@ -337,6 +561,8 @@ void showdate(date *date)
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT1, seg7[datenum[j]] | datedot[j]);
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, light);
             Delay(displaydelay);
+            button_catch();
+            //button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
         }
     }
 }
@@ -367,6 +593,8 @@ void showtime(time *time)
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT1, seg7[timenum[j]]);
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, light);
             Delay(displaydelay);
+            button_catch();
+            //button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
         }
     }
 }
@@ -381,6 +609,8 @@ void showalarm(alarm *alarm)
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT1, seg7[alarmnum[j]]);
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, light);
             Delay(displaydelay);
+            button_catch();
+            //button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
         }
     }
 }
@@ -503,192 +733,7 @@ void SysTick_Handler(void)
         }
     }
     buttontime++;
-    // if(buttontime==50){
-    //     buttontime = 0;
-    //     button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
-    // }
-    // I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, 0x00);
-    if (buttontime > 10)
-    {
-        button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
-        if (buttontime > 100000)
-        {
-            buttontime = 11;
-        }
-    }
-
-    if (button != 0xff)
-    {
-        buttondelay++;
-        if (buttondelay == 3)
-        {
-            // UARTStringPut((uint8_t *)"buttonget\r\n");
-            button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
-
-            buttondelay = 0;
-            // UARTStringPut((uint8_t *)"buttonnnnn\r\n");
-            buttontime = 0;
-            if (button == 0xfe)
-            {
-                buttonstate = 1;
-                state++;
-                if (state == 3)
-                {
-                    state = 0;
-                }
-                if (state == 0)
-                {
-                    clear_display();
-                    dateflag = 1;
-                }
-                else if (state == 1)
-                {
-                    clear_display();
-                    timeflag = 1;
-                }
-                else if (state == 2)
-                {
-                    clear_display();
-                    alarmflag = 1;
-                }
-                UARTStringPut((uint8_t *)"button1\r\n");
-            }
-            else if (button == 0xfd) // 是否流水
-            {
-                buttonstate = 2;
-                if (date_flow_flag == 0)
-                {
-                    clear_display();
-                    date_flow_flag = 1;
-                }
-                else
-                {
-                    date_flow_flag = 0;
-                }
-            }
-            else if (button == 0xfb) // 左右流水
-            {
-                buttonstate = 3;
-                if (direction_flag == 1)
-                {
-                    direction_flag = 0;
-                }
-                else
-                {
-                    direction_flag = 1;
-                }
-            }
-            else if (button == 0xf7)
-            {
-                buttonstate = 4;
-                if (time_flow_flag == 0)
-                {
-                    clear_display();
-                    time_flow_flag = 1;
-                }
-                else
-                {
-                    time_flow_flag = 0;
-                }
-            }
-            else if (button == 0xef)
-            {
-                buttonstate = 5;
-                if (editmode == 0)
-                {
-                    editmode = 1;
-                }
-                else
-                {
-                    editmode = 0;
-                }
-            }
-            else if (button == 0xdf)
-            {
-                buttonstate = 6;
-                editpart++;
-                if (editpart == 3)
-                {
-                    editpart = 0;
-                }
-            }
-            else if (button == 0xbf)
-            {
-                buttonstate = 7;
-                if (editmode == 1)
-                {
-                    if (dateflag == 1)
-                    {
-                        if (editpart == 0)
-                        {
-                            mydate.day++;
-                        }
-                        else if (editpart == 1)
-                        {
-                            mydate.month++;
-                        }
-                        else if (editpart == 2)
-                        {
-                            mydate.year++;
-                        }
-                    }
-                    else if (timeflag == 1)
-                    {
-                        if (editpart == 0)
-                        {
-                            mytime.second++;
-                        }
-                        else if (editpart == 1)
-                        {
-                            mytime.minute++;
-                        }
-                        else if (editpart == 2)
-                        {
-                            mytime.hour++;
-                        }
-                    }
-                }
-            }
-            else if (button == 0x7f)
-            {
-                buttonstate = 8;
-                if (editmode == 1)
-                {
-                    if (dateflag == 1)
-                    {
-                        if (editpart == 0)
-                        {
-                            mydate.day--;
-                        }
-                        else if (editpart == 1)
-                        {
-                            mydate.month--;
-                        }
-                        else if (editpart == 2)
-                        {
-                            mydate.year--;
-                        }
-                    }
-                    else if (timeflag == 1)
-                    {
-                        if (editpart == 0)
-                        {
-                            mytime.second--;
-                        }
-                        else if (editpart == 1)
-                        {
-                            mytime.minute--;
-                        }
-                        else if (editpart == 2)
-                        {
-                            mytime.hour--;
-                        }
-                    }
-                }
-            }
-            button = 0xff;
-        }
-    }
+    
     // 流水线
     if (date_flow_flag == 1 || time_flow_flag == 1)
     {
@@ -776,30 +821,6 @@ uint8_t I2C0_WriteByte(uint8_t DevAddr, uint8_t RegAddr, uint8_t WriteData)
     return rop;
 }
 
-// uint8_t I2C0_ReadByte(uint8_t DevAddr, uint8_t RegAddr)
-// {
-//     uint8_t value, rop;
-//     while (I2CMasterBusy(I2C0_BASE))
-//     {
-//     };
-//     I2CMasterSlaveAddrSet(I2C0_BASE, DevAddr, false);
-//     I2CMasterDataPut(I2C0_BASE, RegAddr);
-//     //	I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START);
-//     I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_SINGLE_SEND);
-//     while (I2CMasterBusBusy(I2C0_BASE))
-//         ;
-//     rop = (uint8_t)I2CMasterErr(I2C0_BASE);
-//     Delay(10);
-//     // receive data
-//     I2CMasterSlaveAddrSet(I2C0_BASE, DevAddr, true);
-//     I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_SINGLE_RECEIVE);
-//     while (I2CMasterBusBusy(I2C0_BASE))
-//         ;
-//     value = I2CMasterDataGet(I2C0_BASE);
-//     Delay(10);
-//     return value;
-// }
-
 uint8_t I2C0_ReadByte(uint8_t DevAddr, uint8_t RegAddr)
 {
     uint8_t value;
@@ -842,63 +863,280 @@ void UARTStringPutNonBlocking(const char *cMessage)
 
 void UART0_Handler(void)
 {
+
     int32_t uart0_int_status;
-    bool has_space = false; // 标记是否存在空格的变量
-    int i = 0;
-
-  
-
+    
     uart0_int_status = UARTIntStatus(UART0_BASE, true);    // Get the interrrupt status.
     UARTIntClear(UART0_BASE, uart0_int_status);            // Clear the asserted interrupts
-    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, GPIO_PIN_1); // PN1 off
+    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, GPIO_PIN_1); // PN1 on
 
     while (UARTCharsAvail(UART0_BASE)) // while receive FIFO is not empty
     {
         uart_receive_str[wordi] = UARTCharGetNonBlocking(UART0_BASE);
-        if (uart_receive_str[wordi] == '\r')
+        if(uart_receive_str[wordi] == '\n')
         {
+            continue;
+        }
+        if (uart_receive_str[wordi] == '\r')//回车键
+        {
+            endflag = 1;
+            uart_receive_str[wordi] = '\0';
+            UARTStringPut(uart_receive_str);
+            UARTStringPut("\r\n");
+            command_process();
             break;
         }
         wordi++;
     }
-    uart_receive_str[wordi] = '\0';
-    UARTStringPut(uart_receive_str);
-    UARTStringPut("\r\n");
 
+    if(endflag == 1){
+        for (wordi = 0; wordi < 50; wordi++)
+        {
+            uart_receive_str[wordi] = 0x00;
+        }
+        wordi = 0;
+        endflag = 0;
+    }
+    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, 0); // PN1 off
+}
+//命令处理
+void command_process(){
+    char new_str[50];
+    char set_str[50];
+    int i = 0, j = 0;
+    int k = 0;
+    int numi = 0;
+    int hour = 0, minute = 0, second = 0;
+    int year = 0, month = 0, day = 0;
+    bool has_space = false;
+    while(uart_receive_str[i] != '\0'){
+        if(uart_receive_str[i]>127){
+            UARTStringPut("full width command\n");
+            wordi = 0;
+            return;
+        }
+        i++;
+    }
+    if (strcmp("?", uart_receive_str) == 0)
+    {
+        UARTStringPut("Available commands:\n");
+        UARTStringPut("\tinit clock                       : intialize the clock to 10:08:00\n");
+        UARTStringPut("\tget <TIME/DATE/ALARM>            : get status\n");
+        UARTStringPut("\tset <TIME/ALARM TIME/DATE> <xx:xx:xx> : set clock status\n");
+        wordi = 0;
+        return;
+    }
+    i=0;
     while (uart_receive_str[i] != '\0') // 遍历字符串，直到遇到字符串结束符
     {
         if (uart_receive_str[i] == ' ')
         {
             has_space = true; // 找到空格，设置标记为 true
-            UARTStringPut("has space\r\n");
-            break;            // 退出循环
+            //UARTStringPut("has space\r\n");
+            break;
         }
         i++;
     }
-    if(strcmp("?", uart_receive_str) == 0){
-        UARTStringPut("Available commands:\n");
-        UARTStringPut("\tinit clock                       : intialize the clock to 00:00:00\n");
-        UARTStringPut("\tget <TIME/DATE/ALARM>            : get status\n");
-        UARTStringPut("\tset <TIME/ALARM/DATE> <xx:xx:xx> : set clock status\n");
-        UARTStringPut("\trun <TIME/DATE/STWATCH>          : run functions\n");
+    if(has_space == false){
+        UARTStringPut("no space command\n");
         wordi = 0;
+        return;
     }
-    if(strcmp("init clock", uart_receive_str) == 0){
+    if (has_space)
+    {
+        for (i = 0; uart_receive_str[i] != '\0'; i++) // 连续空格变成一个
+        {
+            if (uart_receive_str[i] != ' ')
+            {
+                new_str[j++] = uart_receive_str[i];
+            }
+            else if (uart_receive_str[i + 1] != ' ')
+            {
+                new_str[j++] = ' ';
+            }
+        }
+        new_str[j] = '\0';                 // 添加字符串结束符
+        strcpy(uart_receive_str, new_str); // 将新的字符串复制回原始字符串
+        i = 0;
+        while (uart_receive_str[i] != '\0')
+        {
+            if (uart_receive_str[i] >= 'A' && uart_receive_str[i] <= 'Z')
+            {
+                uart_receive_str[i] += 32;
+            }
+            i++;
+        }
+    }
+    if (strcmp("alarm on", uart_receive_str) == 0)
+    {
+        alarm_onoff = 1;
+        UARTStringPut("OK,Alarm on\n");
+        return;
+    }
+    if(strcmp("alarm off", uart_receive_str) == 0)
+    {
+        alarm_onoff = 0;
+        UARTStringPut("OK,Alarm off\n");
+        return;
+    }
+    if (strcmp("init clock", uart_receive_str) == 0)
+    {
         settime(&mytime, 10, 8, 0);
         setdate(&mydate, 2024, 6, 1);
         timeupdate(&mytime);
         dateupdate(&mydate);
         UARTStringPut("Clock initialized\n");
         wordi = 0;
+        return;
     }
+    if (strcmp("get time", uart_receive_str) == 0)
+    {
+        UARTStringPut("Time: ");
+        UARTCharPut(UART0_BASE, mytime.hour / 10 + '0');
+        UARTCharPut(UART0_BASE, mytime.hour % 10 + '0');
+        UARTCharPut(UART0_BASE, ':');
+        UARTCharPut(UART0_BASE, mytime.minute / 10 + '0');
+        UARTCharPut(UART0_BASE, mytime.minute % 10 + '0');
+        UARTCharPut(UART0_BASE, ':');
+        UARTCharPut(UART0_BASE, mytime.second / 10 + '0');
+        UARTCharPut(UART0_BASE, mytime.second % 10 + '0');
+        UARTStringPut("\r\n");
+        wordi = 0;
+        return;
+    }
+    if (strcmp("get date", uart_receive_str) == 0)
+    {
+        UARTStringPut("Date: ");
+        UARTCharPut(UART0_BASE, mydate.year / 1000 + '0');
+        UARTCharPut(UART0_BASE, mydate.year / 100 % 10 + '0');
+        UARTCharPut(UART0_BASE, mydate.year / 10 % 10 + '0');
+        UARTCharPut(UART0_BASE, mydate.year % 10 + '0');
+        UARTCharPut(UART0_BASE, '/');
+        UARTCharPut(UART0_BASE, mydate.month / 10 + '0');
+        UARTCharPut(UART0_BASE, mydate.month % 10 + '0');
+        UARTCharPut(UART0_BASE, '/');
+        UARTCharPut(UART0_BASE, mydate.day / 10 + '0');
+        UARTCharPut(UART0_BASE, mydate.day % 10 + '0');
+        UARTStringPut("\r\n");
+        wordi = 0;
+        return;
+    }
+    if (strcmp("get alarm", uart_receive_str) == 0)
+    {
+        UARTStringPut("Alarm: ");
+        UARTCharPut(UART0_BASE, myalarm.hour / 10 + '0');
+        UARTCharPut(UART0_BASE, myalarm.hour % 10 + '0');
+        UARTCharPut(UART0_BASE, ':');
+        UARTCharPut(UART0_BASE, myalarm.minute / 10 + '0');
+        UARTCharPut(UART0_BASE, myalarm.minute % 10 + '0');
+        UARTCharPut(UART0_BASE, ':');
+        UARTCharPut(UART0_BASE, myalarm.second / 10 + '0');
+        UARTCharPut(UART0_BASE, myalarm.second % 10 + '0');
+        UARTStringPut("\r\n");
+        wordi = 0;
+        return;
+    }
+    for (i = 0; uart_receive_str[i] != '\0'; i++)
+    {
+        if(uart_receive_str[i] >='0' && uart_receive_str[i] <= '9'){
+            numi = i;
+            break;
+        }
+        set_str[i] = uart_receive_str[i];
+    }
+    while(set_str[i-1] == ' '){
+        set_str[i-1] = '\0';
+        i--;
+    }
+    if(strcmp("set time",set_str)==0){
 
-    for(wordi = 0; wordi < 50; wordi++){
-        uart_receive_str[wordi] = 0x00;
+        for (i = numi; uart_receive_str[i] != '\0'; i++)
+        {
+            if(uart_receive_str[i] == ' '){
+                continue;
+            }
+            if (uart_receive_str[i] == ':')
+            {
+                k++;
+                continue;
+            }
+            if (k == 0)
+            {
+                hour = hour * 10 + uart_receive_str[i] - '0';
+            }
+            else if (k == 1)
+            {
+                minute = minute * 10 + uart_receive_str[i] - '0';
+            }
+            else if (k == 2)
+            {
+                second = second * 10 + uart_receive_str[i] - '0';
+            }
+        }
+        settime(&mytime, hour, minute, second);
+        timeupdate(&mytime);
+        return;
     }
-    wordi = 0;
-    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, 0); // PN1 off
+    if(strcmp("set date",set_str)==0){
+        for (i = numi; uart_receive_str[i] != '\0'; i++)
+        {
+            if (uart_receive_str[i] == ' ')
+            {
+                continue;
+            }
+            if (uart_receive_str[i] == ':')
+            {
+                k++;
+                continue;
+            }
+            if (k == 0)
+            {
+                year = year * 10 + uart_receive_str[i] - '0';
+            }
+            else if (k == 1)
+            {
+                month = month * 10 + uart_receive_str[i] - '0';
+            }
+            else if (k == 2)
+            {
+                day = day * 10 + uart_receive_str[i] - '0';
+            }
+        }
+        setdate(&mydate, year, month, day);
+        dateupdate(&mydate);
+        return;
+    }
+    if(strcmp("set alarm time",set_str)==0){
+        for (i = numi; uart_receive_str[i] != '\0'; i++)
+        {
+            if (uart_receive_str[i] == ' ')
+            {
+                continue;
+            }
+            if (uart_receive_str[i] == ':')
+            {
+                k++;
+                continue;
+            }
+            if (k == 0)
+            {
+                hour = hour * 10 + uart_receive_str[i] - '0';
+            }
+            else if (k == 1)
+            {
+                minute = minute * 10 + uart_receive_str[i] - '0';
+            }
+            else if (k == 2)
+            {
+                second = second * 10 + uart_receive_str[i] - '0';
+            }
+        }
+        setalarm(&myalarm, hour, minute, second);
+        alarmupdate(&myalarm);
+        return; 
+    }
+    UARTStringPut("Invalid command\n");
 }
-
 // 流水线显示时间日期
 void date_flow_display(date *date)
 {
@@ -915,6 +1153,7 @@ void date_flow_display(date *date)
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT1, seg7[date_flow_num[j]]);
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, light);
             Delay(displaydelay);
+            button_catch();
         }
     }
 }
@@ -936,6 +1175,7 @@ void time_flow_display(time *time)
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT1, seg7[time_flow_num[j]]);
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, light);
             Delay(displaydelay);
+            button_catch();
         }
     }
 }
@@ -1007,7 +1247,17 @@ int main()
     DevicesInit();
     // setup();
     UARTStringPut("Hello World!\r\n");
-    timeflag = 1;
+    // pui32Data[0] = 49;
+    // pui32Data[1] = 3;
+    // pui32Data[2] = 5;
+    // EEPROMProgram(pui32Data, 0x400, sizeof(pui32Data));
+    // EEPROMRead(pui32Read, 0x400, sizeof(pui32Read));
+    // if(pui32Read[0] == 49 && pui32Read[1] == 3 && pui32Read[2] == 5){
+    //     UARTStringPut("EEPROM test pass\n");
+    // }
+    // else{
+    //     UARTStringPut("EEPROM test fail\n");
+    // }
     while (1)
     {
         if (date_flow_flag == 0 && time_flow_flag == 0 && dateflag == 0 && timeflag == 0 && alarmflag == 0)
