@@ -248,16 +248,14 @@ void PWMInit()
 {
     SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0); // PWM0使能
 
-    PWMOutputState(PWM0_BASE, PWM_OUT_7_BIT, true); // 使能(允许)PWM0_4的输出
-    // PWMGenEnable(PWM0_BASE, PWM_GEN_2);             //使能PWM0模块的2号发生器(因为4号PWM是2号发生器产生的)
-    // PWMGenPeriodSet(PWM0_BASE, PWM_GEN_2, g_ui32SysClock / ui32Freq_Hz); // 根据Freq_Hz设置PWM周期
+    PWMOutputState(PWM0_BASE, PWM_OUT_7_BIT, true); // 使能(允许)PWM0_7的输出
 
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK); // 使能GPIOG
     GPIOPinConfigure(GPIO_PK5_M0PWM7);           // 配置引脚复用
     GPIOPinTypePWM(GPIO_PORTK_BASE, GPIO_PIN_5); // 引脚映射
 
     PWMGenConfigure(PWM0_BASE, PWM_GEN_3, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC); // 配置PWM发生器
-    // PWMPulseWidthSet(PWM0_BASE, PWM_OUT_4,(PWMGenPeriodGet(PWM0_BASE, PWM_GEN_2)/ 2)); //设置占空比为50%
+    
 }
 
 void S800_GPIO_Init(void) // initialize
