@@ -95,13 +95,16 @@ int updatetime = 0;
 // 流水线
 uint32_t date_flow_flag = 0;
 uint32_t time_flow_flag = 0;
+uint32_t long_flow_flag = 0;
 int date_flow_num[8];
 int time_flow_num[8];
+int long_flow_num[16];
 int flow_time = 0;
 int last = 0;
 int datei = 0;
 int direction_flag = 0; // 0向右，1向左
 int flow_speed = 50;
+
 // PWM
 uint8_t times = 0;
 uint32_t pwmflag = 0;
@@ -151,6 +154,7 @@ void UARTStringPutNonBlocking(const char *cMessage);
 void array_flow(int *flow_num);
 void light_display(void);
 void command_process(void);
+void long_array_flow(int *flow_num, int length);
 // delay函数
 void Delay(uint32_t value)
 {
@@ -166,6 +170,7 @@ void clear_display()
     alarmflag = 0;
     date_flow_flag = 0;
     time_flow_flag = 0;
+    long_flow_flag = 0;
 }
 // 函数定义
 
@@ -376,6 +381,11 @@ void button_catch(){
                 {
                     clear_display();
                     time_flow_flag = 1;
+                }
+                else if(alarmflag == 1)
+                {
+                    clear_display();
+                    long_flow_flag = 1;
                 }
                 // if (date_flow_flag == 0)
                 // {
@@ -798,7 +808,7 @@ void SysTick_Handler(void)
     buttontime++;
     
     // 流水线
-    if (date_flow_flag == 1 || time_flow_flag == 1)
+    if (date_flow_flag == 1 || time_flow_flag == 1||long_flow_flag == 1)
     {
         flow_time++;
         if (flow_time == flow_speed)
@@ -811,6 +821,10 @@ void SysTick_Handler(void)
             if (time_flow_flag == 1)
             {
                 array_flow(time_flow_num);
+            }
+            if(long_flow_flag == 1)
+            {
+                long_array_flow(long_flow_num, 16);
             }
         }
     }
@@ -841,7 +855,31 @@ void array_flow(int *flow_num)
         flow_num[0] = last;
     }
 }
-
+void long_array_flow(int *flow_num, int length)
+{
+    int last = 0;
+    int i = 0;
+    if (direction_flag == 1)
+    {
+        // 左移操作
+        last = flow_num[0];
+        for (i = 0; i < length - 1; i++)
+        {
+            flow_num[i] = flow_num[i + 1];
+        }
+        flow_num[length - 1] = last;
+    }
+    else
+    {
+        // 右移操作
+        last = flow_num[length - 1];
+        for (i = length - 1; i > 0; i--)
+        {
+            flow_num[i] = flow_num[i - 1];
+        }
+        flow_num[0] = last;
+    }
+}
 // PWM player
 void PWMStart(uint32_t ui32Freq_Hz)
 {
@@ -1266,6 +1304,31 @@ void time_flow_display(time *time)
         }
     }
 }
+void long_flow_display(time*time,date *date){
+    uint8_t j, light;
+    for (j = 0; j < 8; j++)
+    {
+        long_flow_num[j] = timenum[j];
+        long_flow_num[2] = 17;
+        long_flow_num[5] = 17;
+    }
+    for(j=8;j<16;j++)
+    {
+        long_flow_num[j] = datenum[j-8];
+    }
+    while (long_flow_flag)
+    {
+        for (j = 0, light = 0x80; j < 8; j++, light >>= 1)
+        {
+            I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, 0x00);
+            I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT1, seg7[long_flow_num[j]]);
+            I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, light);
+            Delay(displaydelay);
+            button_catch();
+        }
+    }
+
+}
 
 // 指示灯作用
 void light_display()
@@ -1358,5 +1421,6 @@ int main()
         showalarm(&myalarm);
         date_flow_display(&mydate);
         time_flow_display(&mytime);
+        long_flow_display(&mytime,&mydate);
     }
 }
