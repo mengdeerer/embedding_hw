@@ -101,7 +101,7 @@ int flow_time = 0;
 int last = 0;
 int datei = 0;
 int direction_flag = 0; // 0向右，1向左
-int flow_speed = 100;
+int flow_speed = 50;
 // PWM
 uint8_t times = 0;
 uint32_t pwmflag = 0;
@@ -350,19 +350,19 @@ void button_catch(){
                 if (state == 0)
                 {
                     clear_display();
-                    dateflag = 1;
+                    timeflag = 1;
                 }
                 else if (state == 1)
                 {
                     clear_display();
-                    timeflag = 1;
+                    dateflag = 1;
                 }
                 else if (state == 2)
                 {
                     clear_display();
                     alarmflag = 1;
                 }
-                UARTStringPut((uint8_t *)"button1\r\n");
+                //UARTStringPut((uint8_t *)"button1\r\n");
             }
             else if (button == 0xfd) // 是否流水
             {
@@ -578,6 +578,27 @@ void showdate(date *date)
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, light);
             Delay(displaydelay);
             button_catch();
+            if(editmode == 1)
+            {
+                if(editpart==0){
+                    if(j==0||j==1)
+                    {
+                        Delay(10000);
+                    }
+                }
+                else if(editpart==1){
+                    if(j==2||j==3)
+                    {
+                        Delay(10000);
+                    }
+                }
+                else if(editpart==2){
+                    if(j==4||j==5||j==6||j==7)
+                    {
+                        Delay(10000);
+                    }
+                }
+            }
             //button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
         }
     }
@@ -610,6 +631,27 @@ void showtime(time *time)
             I2C0_WriteByte(TCA6424_I2CADDR, TCA6424_OUTPUT_PORT2, light);
             Delay(displaydelay);
             button_catch();
+            if(editmode == 1)
+            {
+                if(editpart==0){
+                    if(j==0||j==1)
+                    {
+                        Delay(10000);
+                    }
+                }
+                else if(editpart==1){
+                    if(j==3||j==4)
+                    {
+                        Delay(10000);
+                    }
+                }
+                else if(editpart==2){
+                    if(j==6||j==7)
+                    {
+                        Delay(10000);
+                    }
+                }
+            }
             //button = I2C0_ReadByte(TCA6424_I2CADDR, TCA6424_INPUT_PORT0);
         }
     }
@@ -996,13 +1038,13 @@ void command_process(){
     }
     if(strcmp("speed high", uart_receive_str) == 0)
     {
-        flow_speed = 50;
+        flow_speed = 25;
         UARTStringPut("OK,Speed high\n");
         return;
     }
     if(strcmp("speed low", uart_receive_str) == 0)
     {
-        flow_speed = 100;
+        flow_speed = 50;
         UARTStringPut("OK,Speed low\n");
         return;
     }
